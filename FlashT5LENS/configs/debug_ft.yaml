@@ -1,0 +1,110 @@
+# @package _global_
+
+# Experiment args
+mode: 'ft'
+device: gpu
+precision: 'bf16'
+eval_only: false
+predict_only: false
+load_all: false
+seed: 2137
+id: 222
+
+
+task:
+  type: 'classification' # 'classification' or 'generation' or 'clsbytoken'
+  # type: 'generation'
+  # dataset: 'USTC-TFC2016'
+  # dataset: 'VPN'
+  # name: ''
+  # name: 'DoH Attack Detection'         # Task 12-2 classes
+  # name: 'DoH Query Generator Detection' # Task 13-5 classes
+  # name: 'VPN+Application+Classification' # Task 3-17 classes
+  # name: 'VPN Service Classification'   # Task 2-6 classes
+  # name: 'VPN Detection'                # Task 1-2 classes
+  # name: 'USTC APP Detection'           # Task 7-20 classes
+  # name: 'USTC Malware Detection'       # Task 6-2 classes
+  # name: 'IoT Method Detection'         # Task 15-8 classes
+  # name: 'IoT Malicious Detection'      # Task 14-2 classes
+  # name: 'Tor Service Detection'        # Task 5-7 classes
+  # name: 'Tor Detection'                # Task 4-2 classes
+  # name: 'CrossPlatform Android APP Classification' # Task 8-209 classes
+  # name: 'CrossPlatform Android APP Country Detection' # Task 9-3 classes
+  name: 'CrossPlatform_IOS+APP+Classification'   # Task 10-212 classes
+  # name: 'CrossPlatform IOS APP Country Detection'# Task 11-3 classes
+  # name: 'Generation All' 
+  # name: 'Generation Port Len' 
+  # name: 'Source Port Generation'
+  # name: 'Destination Port Generation'
+  # name: 'Packet Length Generation'
+  # name: 'Source IP Generation'
+  # name: 'Destination IP Generation'
+  level: 'flow' # 'pkt' or 'flow'
+  refine: 'unlimit' # 'unlimit' or 'limit'
+
+
+
+data:
+  base_dir: '/data/lcharles/DATASETS/NETBENCH/netbench_v13'
+  tokenizer_path: '/data/lcharles/DATASETS/NETBENCH/netbench_v13/tokenizer/NetT5WordPiece65536'
+  input_length: 1000
+  mlm_probability: 0.15
+  mean_noise_span_length: 4.0
+  num_workers: 0
+  
+
+
+model:
+  klass: local_t5
+  name: 'google/t5-v1_1-base'
+  restore_path: '/data/lcharles/FLASHLENS/PT_CKPT/NB_v12_PT_FlashLens/2024-07-18-14-18-28/checkpoint-pt-100000'
+  overwrite:
+    # dropout_rate: 0.1
+    vocab_size: 65537
+  add_config:
+    is_bf16: true
+  checkpoint_path: ''
+  random_init: true
+  compile: false # Pytorch 2.0
+  pkt_token_id: 4
+
+
+optim:
+  name: adamw
+  base_lr: 3e-5 #
+  batch_size: 120 # if 2, then means for eval test, 128 for faster eval result.
+  total_steps: 40000 # 65536 for one, 32768 for four, 12200 default
+  epochs: 0 # If it's > 0 it overwrites total_steps
+  current_epoch: 0
+  warmup_steps: 0
+  lr_scheduler: constant
+  weight_decay: 0.0
+  grad_clip: 1.0
+  grad_acc: 4
+  loss_type: 'CE' # 'CE'/'PLA'/'FOCAL'/ LDAM/ LADE
+  # final_cosine: 1e-5
+
+eval:
+  every_steps: 10 # Eval once in the end
+  steps: 10
+  eval_epochs: 1
+
+checkpoint:
+  every_steps: 4000 # Save checkpoint once in the end
+
+logging:
+  wandb: false
+  neptune: false
+  neptune_creds:
+    project:
+    api_token:
+    tags: ''
+  every_steps: 10
+  grad_l2: true
+  weights_l2: true
+
+hydra:
+  job:
+    chdir: True
+  run:
+    dir: /data/lcharles/FLASHLENS/DEBUG_LOG/${task.name}/${now:%Y-%m-%d}-${now:%H-%M-%S}/

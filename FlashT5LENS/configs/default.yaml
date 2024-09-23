@@ -1,0 +1,11 @@
+defaults:
+  - task: v13_ft  #finetune  pretrain
+  - _self_
+  # - local_env: default
+
+# hydra:
+#   job:
+#     chdir: True
+#   run:
+#     dir: /data/lcharles/CHECKPOINTS/FlashLens/${task.name}-${task.level}/${now:%Y-%m-%d}/${now:%H-%M-%S}/
+#     # dir: ./logs/${task.name}-${task.level}/${now:%Y-%m-%d}/${now:%H-%M-%S}/

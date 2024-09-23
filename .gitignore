@@ -4,3 +4,9 @@ nightly/
 nohup.out
 .*
 wandb/
+DEBUG_LOG
+cache
+FAT5LENS/FlashT5/data
+FAT5LENS/FlashT5/results
+*.pyc
+flash-attention

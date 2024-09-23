@@ -1,0 +1,70 @@
+# @package _global_
+
+# Experiment args
+mode: 'pt'
+device: gpu
+precision: 'bf16'  # 'fp16'  #'bf16' # 'no' 
+eval_only: false
+predict_only: false
+load_all: true
+seed: 2137
+
+task:
+  name: "lens_v1_pretrain"
+  level: 'flow' # only flow for pre-training
+
+
+model:
+  restore_path: ''
+  klass: local_t5
+  name: 'google/t5-v1_1-base'
+  overwrite:
+    relative_attention_max_distance: 512
+    dropout_rate: 0.1
+    vocab_size: 65537
+    # vocab_size: 65660
+  add_config:
+    is_bf16: false
+  checkpoint_path: ""
+  random_init: true
+  compile: true # Pytorch 2.0
+  pkt_token_id: 4
+
+data:
+  base_dir: '/data/lcharles/DATASETS/NETBENCH/lens_v1'
+  pkt_per_flow: 10
+  input_length: 1000 # 512
+  mlm_probability: 0.15
+  mean_noise_span_length: 4.0
+  num_workers: 0
+
+optim:
+  name: adamwscale
+  base_lr: 16e-3 #
+  batch_size: 160 # if 2, then means for eval test # pre-training set 100 and grad for 4 
+  total_steps: 100050 # 65536 for one, 32768 for four
+  epochs: 0 # If it's > 0 it overwrites total_steps
+  warmup_steps: 15000
+  lr_scheduler: cosine
+  weight_decay: 0.0
+  grad_clip: 1.0
+  grad_acc: 4
+  final_cosine: 1e-5
+
+eval:
+  every_steps: 100050 # Eval once in the end
+  steps: 2000  # overall steps, will be modified in code
+
+checkpoint:
+  every_steps: 5000 # Save checkpoint once in the end
+
+logging:
+  wandb: true
+  neptune: false
+  neptune_creds:
+    project:
+    api_token:
+    tags: ''
+  every_steps: 50
+  grad_l2: true
+  weights_l2: true

@@ -1,0 +1,77 @@
+# @package _global_
+
+# Experiment args
+mode: 'pt'
+device: gpu
+precision: 'bf16'  # 'fp16'  #'bf16' # 'no' 
+eval_only: false
+predict_only: false
+load_all: true
+seed: 2137
+
+task:
+  name: "debug_pretrain"
+  level: 'flow' # only flow for pre-training
+
+
+model:
+  klass: local_t5
+  name: 'google/t5-v1_1-base'
+  restore_path: ''
+  overwrite:
+    dropout_rate: 0.1
+    vocab_size: 65537
+    # vocab_size: 65660
+  add_config:
+    is_bf16: true # or false
+  checkpoint_path: ''
+  random_init: true
+  compile: false # Pytorch 2.0
+  pkt_token_id: 4
+
+data:
+  base_dir: '/data/lcharles/DATASETS/NETBENCH/netbench_v12'
+  tokenizer_path: '/data/lcharles/DATASETS/NETBENCH/netbench_v13/tokenizer/NetT5WordPiece65536'
+  long_context: true
+  pkt_per_flow: 10
+  input_length: 1000 # 512
+  mlm_probability: 0.15
+  mean_noise_span_length: 4.0
+  num_workers: 0
+
+optim:
+  name: adamwscale
+  base_lr: 16e-3 #
+  batch_size: 8 # if 2, then means for eval test # pre-training set 100 and grad for 4
+  total_steps: 200000 # 65536 for one, 32768 for four
+  epochs: 0 # If it's > 0 it overwrites total_steps
+  warmup_steps: 15000
+  lr_scheduler: cosine
+  weight_decay: 0.0
+  grad_clip: 1.0
+  grad_acc: 4
+  final_cosine: 1e-5
+
+eval:
+  every_steps: 1000000 # Eval once in the end
+  steps: 1000000  # overall steps, will be modified in code
+
+checkpoint:
+  every_steps: 1000 # Save checkpoint once in the end
+
+logging:
+  wandb: false
+  neptune: false
+  neptune_creds:
+    project:
+    api_token:
+    tags: ''
+  every_steps: 10
+  grad_l2: true
+  weights_l2: true
+
+hydra:
+  job:
+    chdir: True
+  run:
+    dir: ${hydra:runtime.cwd}/DEBUG_LOG/${task.name}/${now:%Y-%m-%d}-${now:%H-%M-%S}/
