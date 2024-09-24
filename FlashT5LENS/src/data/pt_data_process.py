@@ -1,6 +1,7 @@
 """
 Input:
     - filtered 'train' json files. 
+    mainly for generating POP and NML pre-training tasks.
     ['path', 'label1', 'label2' ,'label3', dataset_type:'train', text:"", network_model_layer:""]
     - The text is the hexdecimal representation of the pcap file. -with desired length truncated by pcap2json.
 Output:
@@ -47,9 +48,6 @@ def _trunc_sanity_check(tokenizer, truncted_content:List):
 
 
 class pt_dataset:
-    STOP_TOKEN_ID = 1 # EOS token
-    HEADER_TOKEN_ID = 3
-    PKT_TOKEN_ID = 4
     # pt_data_names = ['DoHBrw_train_flow', 'VPN_train_flow', 'USTC-TFC2016_train_flow', 'IoT-Lite_train_flow', 'Tor_train_flow']
     pt_data_names = ['USTC-TFC2016_val_flow']
     
@@ -74,13 +72,17 @@ class pt_dataset:
         """
         super().__init__()
         self.tokenizer = tokenizer
+        # Check the special tokens not <unk>(2) in wordpiece tokenizer.
+        pt_dataset.EOS_ID = self.tokenizer.eos_token_id             # 1
+        pt_dataset.HEAD_ID = self.tokenizer.convert_tokens_to_ids('<head>') # 3
+        pt_dataset.PKT_ID = self.tokenizer.convert_tokens_to_ids('<pkt>') # 4
         self.optim_len = optim_len
         self.pkt_per_flow = pkt_per_flow
         self.pop_percent = pop_percent
         self.pop_switch_gap = pop_switch_gap
         self.nml_label_gap = nml_label_gap
         self.pt_data_path = pt_data_path
-        self.cache_dir = '/data/lcharles/FAT5LENS/cache/pt_test'
+        self.cache_dir = '/data/lcharles/FAT5LENS/cache/pt_toy_val'
         ...
         
     def load_single_dataset(self, pt_data_name):
@@ -180,8 +182,8 @@ class pt_dataset:
         
         for id_input, input_text in enumerate(tknzed_input):
             current_len = len(input_text)
-            packets = [list(group) for key, group in groupby(input_text, key=lambda k: k != pt_dataset.PKT_TOKEN_ID) if key]
-            if packets[-1][0] == pt_dataset.STOP_TOKEN_ID and len(packets[-1]) == 1:
+            packets = [list(group) for key, group in groupby(input_text, key=lambda k: k != pt_dataset.PKT_ID) if key]
+            if packets[-1][0] == pt_dataset.EOS_ID and len(packets[-1]) == 1:
                 packets.pop()
             packet_num = len(packets)
             
@@ -191,8 +193,8 @@ class pt_dataset:
                 optim_len_wo_special_tokens = optim_len - packet_num - 1
                 delete_len = current_len - optim_len_wo_special_tokens
                 
-                header_payload = [{'header': pkt[:pkt.index(pt_dataset.HEADER_TOKEN_ID)],
-                                   'raw': pkt[pkt.index(pt_dataset.HEADER_TOKEN_ID)+1:]} for pkt in packets]
+                header_payload = [{'header': pkt[:pkt.index(pt_dataset.HEAD_ID)],
+                                   'raw': pkt[pkt.index(pt_dataset.HEAD_ID)+1:]} for pkt in packets]
                 total_payload_len = sum(len(hd_pd['raw']) for hd_pd in header_payload)
                 total_header_len = sum(len(hd_pd['header']) for hd_pd in header_payload)
                 
@@ -217,7 +219,7 @@ class pt_dataset:
                         pkt['raw'] = []
                 
                 # reconstruct the input and save to the tokenized input               
-                packets = [packet['header'] + [pt_dataset.HEADER_TOKEN_ID] + packet['raw'] for packet in header_payload]
+                packets = [packet['header'] + [pt_dataset.HEAD_ID] + packet['raw'] for packet in header_payload]
             
                         
             # construct the pop order
@@ -238,7 +240,7 @@ class pt_dataset:
                 packets = [packets[order] for order in packet_order_permute]
             
             
-            packets = [pkt + [pt_dataset.PKT_TOKEN_ID] for pkt in packets]
+            packets = [pkt + [pt_dataset.PKT_ID] for pkt in packets]
             tknzed_input[id_input] = sum(packets, [])
             assert len(tknzed_input[id_input]) <= optim_len - 1, "The input length is larger than the optimal length." 
 
@@ -253,7 +255,8 @@ if __name__ == "__main__":
     # # Load the pre-trained model and tokenizer.
     def _get_tokenizer():
 
-        tokenizerName = "/data2/charles/Tokenizer/NetT5WordPiece65536"
+        # tokenizerName = "/data2/charles/Tokenizer/NetT5WordPiece65536"
+        tokenizerName = '/data/lcharles/DATASETS/RAWPACAP/Tokenizer/NetBPE32000'
         print(f"Using tokenizer from {tokenizerName}")
         tokenizer = AutoTokenizer.from_pretrained(
             tokenizerName,
@@ -265,5 +268,7 @@ if __name__ == "__main__":
     pt_data_path = "/data/lcharles/DATASETS/NETBENCH/netbench_v12/json/flow"
     
     dataset = pt_dataset(tokenizer, pt_data_path, pkt_per_flow=10, optim_len=1024, pop_percent=0.2, pop_switch_gap=5, nml_label_gap=4)
-    print(dataset)
+    print(dataset.EOS_ID)
+    print(dataset.HEAD_ID)
+    print(dataset.PKT_ID)
     ...

@@ -1,6 +1,6 @@
 import os
 import numpy as np
-# os.environ["CUDA_VISIBLE_DEVICES"] = str(1)
+os.environ["CUDA_VISIBLE_DEVICES"] = str(1)
 # os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 # os.environ["TOKENIZERS_PARALLELISM"] = "false"
 import hydra

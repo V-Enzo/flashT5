@@ -22,11 +22,11 @@ class FlashT5Config(T5Config):
         decoder_start_token_id=0,
         pad_token_id=-100,
         use_glu_mlp=False,
-        position_encoding_type="t5",
+        position_encoding_type="RoPE", #ALiBi, t5, RoPE, FIRE
         use_randomized_position_encoding=False,
         label_smoothing=0.0,
         z_loss=0.0,
-        attention_type="triton", # fa2(need to install specific version)/ triton/ ref
+        attention_type="orifa2", # fa2(need to install specific version)/ triton/ ref/ orifa2(use with rope)
         max_sequence_length=1024,
         attention_dropout_rate=0.0,
         alibi_mode="symetric",
@@ -95,7 +95,7 @@ class FlashT5Config(T5Config):
         self.relative_attention_num_buckets = 32
         self.tie_word_embeddings = False
         # TODO: Need to replace with the Charles one.
-        # self.vocab_size = 32128 # 2024-0916 bpe re-trained by Charles
+        # self.vocab_size = 32000 # 2024-0916 bpe re-trained by Charles
         self.vocab_size = 65536
         self.is_bf16 = False # 2024-0916 keep it False for now
    

@@ -9,15 +9,8 @@ import numpy as np
 import torch
 
 class DataCollatorForPretrain(DataCollatorMixin):
-    """Args:
-            noise_density (:obj:`float`):
-            The probability with which to (randomly) mask tokens in the input.
-    """
-    PAD_TOKEN_ID = 0
-    HEADER_TOKEN_ID = 3
-    PKT_TOKEN_ID = 4
     def __init__(self, 
-                #  tokenizer:AutoTokenizer,
+                 tokenizer:AutoTokenizer,
                  max_length:int,
                  optimal_len:int,   
                  max_labels_length:int,
@@ -26,7 +19,17 @@ class DataCollatorForPretrain(DataCollatorMixin):
                  min_mask_span_length:int=5,
                  ):
         super().__init__()
-        # self.tokenizer = tokenizer
+        """Args:
+            noise_density (:obj:`float`):
+            The probability with which to (randomly) mask tokens in the input.
+        """
+        
+        self.tokenizer = tokenizer
+        self.PAD_ID = self.tokenizer.pad_token_id # 0
+        self.EOS_ID = self.tokenizer.eos_token_id # 1
+        self.HEAD_ID = self.tokenizer.convert_tokens_to_ids("<head>") # 3
+        self.PKT_ID = self.tokenizer.convert_tokens_to_ids("<pkt>") # 4
+        
         self.max_length = max_length
         self.optimal_len = optimal_len
         self.max_labels_length = max_labels_length
@@ -108,7 +111,7 @@ class DataCollatorForPretrain(DataCollatorMixin):
         # MSP task organization
         attn_mask = np.ones_like(input_ids)
         # skip special tokens to mask: make <pkt> and <head> unavailable to mask
-        attn_mask[(input_ids ==self.PKT_TOKEN_ID) | (input_ids == self.HEADER_TOKEN_ID)] = 0
+        attn_mask[(input_ids ==self.PKT_ID) | (input_ids == self.HEAD_ID)] = 0
         
         spans_noise_masks = np.asarray(
             [
@@ -134,13 +137,13 @@ class DataCollatorForPretrain(DataCollatorMixin):
         
         # Packet order prediction task
         pop_mask = np.zeros_like(batch['input_ids'])
-        condition = (batch["input_ids"] == self.PKT_TOKEN_ID) & ((batch["pop_order"][:] != -100).sum(axis=1)!=0)[:, np.newaxis]
+        condition = (batch["input_ids"] == self.PKT_ID) & ((batch["pop_order"][:] != -100).sum(axis=1)!=0)[:, np.newaxis]
         pop_mask[condition] = True
         batch['pop_mask'] = pop_mask.astype(bool)
         
         # Network model layer prediction
         nml_mask = np.zeros_like(batch['input_ids'])
-        condition = (batch['input_ids']==self.HEADER_TOKEN_ID) & ((batch["nml_labels"] != -100).sum(axis=-1)!=0)[:, np.newaxis]
+        condition = (batch['input_ids']==self.HEAD_ID) & ((batch["nml_labels"] != -100).sum(axis=-1)!=0)[:, np.newaxis]
         nml_mask[condition] = True
         batch['nml_mask'] = nml_mask.astype(bool)
         
@@ -150,14 +153,14 @@ class DataCollatorForPretrain(DataCollatorMixin):
         # process for the header and payload segment embedding
         # Redundency in packet_embed_ids is okay, as these -100 will be masked.
         pkt_token_mask = np.zeros_like(batch['input_ids'])
-        pkt_token_mask[batch['input_ids'] == self.PKT_TOKEN_ID] = 1
+        pkt_token_mask[batch['input_ids'] == self.PKT_ID] = 1
         pkt_seg_index = np.cumsum(pkt_token_mask, axis=-1) - pkt_token_mask
         batch['pkt_seg_ind'] = pkt_seg_index.astype(np.int64) # [0000,1111,22..,3333,...]
         
         # [0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 1] ^ [1, 1, 0, 0, 0, 0, 1, 1, 1, 0, 0, 1]
         # ->[1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 0, 0]
         seg_token_mask = np.zeros_like(batch['input_ids'])
-        seg_token_mask[(batch["input_ids"]==self.HEADER_TOKEN_ID)|(batch["input_ids"]==self.PKT_TOKEN_ID)] = 1
+        seg_token_mask[(batch["input_ids"]==self.HEAD_ID)|(batch["input_ids"]==self.PKT_ID)] = 1
         flipped_seg_mask = self.flip_segment_id(seg_token_mask)
         head_payload_seg_ind = flipped_seg_mask ^ seg_token_mask
         batch['head_payload_seg_ind'] = head_payload_seg_ind.astype(np.int64)
@@ -313,11 +316,15 @@ class DataCollatorForPretrain(DataCollatorMixin):
         # masked tokens coming after sentinel tokens and should be removed
         if is_label == False: 
             input_ids_shrink = [item[item>=0] for item in input_ids_full]
-            padded_arrays = [np.pad(arr, (0, set_length - len(arr)), constant_values=DataCollatorForPretrain.PAD_TOKEN_ID) for arr in input_ids_shrink]
+            padded_arrays = [np.pad(
+                            np.pad(arr,(0, 1), constant_values=self.EOS_ID), # add EOS token
+                            (0, set_length - len(arr) - 1), constant_values=self.PAD_ID) for arr in input_ids_shrink] # pad the rest of the sequence
         else:
             # remove the last sentinetal token for labels
             input_ids_shrink = [item[item>=0][:-1] for item in input_ids_full]  
-            padded_arrays = [np.pad(arr, (0, set_length - len(arr)), constant_values=-100) for arr in input_ids_shrink]
+            padded_arrays = [np.pad(
+                            np.pad(arr,(0, 1), constant_values=self.EOS_ID),
+                            (0, set_length - len(arr) - 1), constant_values=-100) for arr in input_ids_shrink]
                 
         input_ids = np.array(padded_arrays)
         return input_ids
@@ -344,12 +351,24 @@ class DataCollatorForPretrain(DataCollatorMixin):
 
 
 if __name__ == '__main__':
+    def _get_tokenizer():
+        tokenizerName = "/data2/charles/Tokenizer/NetT5WordPiece65536"
+        # tokenizerName = '/data/lcharles/DATASETS/RAWPACAP/Tokenizer/NetBPE32000'
+        print(f"Using tokenizer from {tokenizerName}")
+        tokenizer = AutoTokenizer.from_pretrained(
+            tokenizerName,
+            use_fast=True
+        )
+        tokenizer.model_max_length = int(1e9)
+        return tokenizer
+    tokenizer = _get_tokenizer()
+    
     examples = [
-    {'input_ids': np.array([1, 2, 3, -100, -100]), 'attention_mask': np.array([1, 1, 1, 0, 0]),
-     'pkt_order': np.array([1, 2, 3, -100, -100]), 'nml_label': np.array([1, 2, 3, -100, -100])},
-    {'input_ids': np.array([4, 5, -100, -100, -100]), 'attention_mask': np.array([1, 1, 0, 0, 0]),
+    {'input_ids': np.array([1, 2, 3,4,5,6,7,8 -100, -100]), 'attention_mask': np.array([1, 1, 1, 1,1,1,1,1,0, 0]),
+     'pkt_order': np.array([1, 2, 3, -100, -100]), 'nml_label': np.array([1, 2, 3,4,5,6,7 -100, -100])},
+    {'input_ids': np.array([4, 5, 6,7,8,9,10,11, -100, -100]), 'attention_mask': np.array([1, 1, 0, 0, 0]),
      'pkt_order': np.array([4, 5, -100, -100, -100]), 'nml_label': np.array([4, 5, -100, -100, -100])}
     ]
 
-    batch = DataCollatorForPretrain(None,5,5,0.2,3, 2)(examples)
+    batch = DataCollatorForPretrain(tokenizer, 10, 10,0.2,3, 2)(examples)
     print(f"Batch: {batch}")

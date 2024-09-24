@@ -257,6 +257,7 @@ class pt_trainer:
         
                 
         data_collator = DataCollatorForPretrain(
+            tokenizer = self.tokenizer,
             max_length = max_length,
             optimal_len=optim_len,
             max_labels_length=target_length,

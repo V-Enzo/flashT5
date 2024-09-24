@@ -35,7 +35,7 @@ except ImportError:
     gated_mlp = None
 
 try:
-    #from flash_attn import flash_attn_kvpacked_func, flash_attn_func
+    # from flash_attn import flash_attn_kvpacked_func, flash_attn_func
     from ..utils.fa2_lib.fa2_compilable import flash_attn_kvpacked_func, flash_attn_func
 except ImportError:
     flash_attn_kvpacked_func, flash_attn_func = None, None
@@ -44,6 +44,9 @@ from ..utils.attn_ref import attn_ref
 
 from .configuration_flash_t5 import FlashT5Config
 from ..utils.positional_encoding import ALiBiPositionalEncoding, RelativePositionalEncoding, RotaryPositionalEncoding, FIRE
+
+from .ori_flash_attn import ori_flash_attn_varlen_func
+
 
 class FlashT5CrossEntropyLoss(nn.Module):
     def __init__(self, z_loss_factor=0.0, label_smoothing=0.0, use_triton_crossentropy=False):
@@ -289,9 +292,9 @@ class FlashT5Attention(nn.Module, ModuleUtilsMixin):
             output = flash_attention_v2_bias(q, k, v, position_bias, self.is_causal, self.softmax_scale)
             output = output.permute(0, 2, 1, 3)
         # 2024-0923: Add the flash_ori_attention
-        elif self.attention_type == "fa2_ori":
-            ...
-        
+        elif self.attention_type == "orifa2":
+            assert self.position_encoding_type == 'RoPE', "Only support the RoPE position encoding"
+            output = ori_flash_attn_varlen_func(q, k, v, dropout_p=self.p_dropout, softmax_scale=self.softmax_scale, causal=self.is_causal)
         else: # use flash attention
             q = q.permute(0, 2, 1, 3)
             k = k.permute(0, 2, 1, 3)

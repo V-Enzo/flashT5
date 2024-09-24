@@ -1,5 +1,5 @@
 defaults:
-  - task: v13_ft  #finetune  pretrain
+  - task: v13_ft  #finetune  pretrain v12_pt
   - _self_
   # - local_env: default
 
